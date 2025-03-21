@@ -5,7 +5,9 @@ interface HudContextProps {
     isHudOpen: boolean;
     isLabelingOpen: boolean;
     setIsHudOpen: React.Dispatch<React.SetStateAction<boolean>>;
-    setIsLabelingOpen: (labeling: boolean) => void;
+    setIsLabelingOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    showOnboarding: boolean;
+    setShowOnboarding: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 // Create the context with an undefined initial value.
@@ -20,9 +22,10 @@ interface HudProviderProps {
 export function HudProvider({ children }: HudProviderProps): JSX.Element {
     const [isHudOpen, setIsHudOpen] = useState<boolean>(false);
     const [isLabelingOpen, setIsLabelingOpen] = useState<boolean>(false);
+    const [showOnboarding, setShowOnboarding] = useState(false);
 
     return (
-        <HudContext.Provider value={{ isHudOpen, setIsHudOpen,isLabelingOpen, setIsLabelingOpen }}>
+        <HudContext.Provider value={{ isHudOpen, setIsHudOpen,isLabelingOpen, setIsLabelingOpen, showOnboarding, setShowOnboarding }}>
             {children}
         </HudContext.Provider>
     );

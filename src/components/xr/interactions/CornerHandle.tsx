@@ -1,101 +1,119 @@
-import {AnnotationBox} from "../../../types/AnnotationBox";
-
+import { AnnotationBox } from "../../../types/AnnotationBox";
 import * as THREE from "three";
-
 import { Handle } from "@react-three/handle";
-import {useEffect, useRef, useState} from "react";
-import {defaultApply} from "@pmndrs/handle";
-
+import { useEffect, useRef, useState } from "react";
+import { defaultApply } from "@pmndrs/handle";
+import {worldToLocal} from "../../../util/worldToLocal";
+import {localToWorld} from "../../../util/localToWorld";
 
 interface CornerHandleProps {
     handleIndex: number;
-    initialPosition: [number, number, number];
-    center: THREE.Vector3;
-    size: THREE.Vector3;
-    updateBox?: (index: number, updatedBox: AnnotationBox) => void;
-    boxIndex?: number;
+    box: AnnotationBox;
+    updateBox?: (updatedBox: AnnotationBox) => void;
 }
 
-export function CornerHandle({ handleIndex, center, size, updateBox, boxIndex }: CornerHandleProps) {
-    const meshRef = useRef<THREE.Mesh>(null);
+/**
+ * CornerHandle component for resizing the box with rotation awareness.
+ */
+export function CornerHandle({ handleIndex, updateBox, box }: CornerHandleProps) {
+    const meshRef = useRef<THREE.Mesh | null>(null);
     const [isDragging, setIsDragging] = useState(false);
-    const [savedPosition, setSavedPosition] = useState<THREE.Vector3 | null>(null);
-    const [inPlace, setInPlace] = useState(false); // NEW STATE: Prevent unnecessary offset updates
+    const [hovered, setHovered] = useState(false);
+    const [handleRadius, setHandleRadius] = useState(0.05);
+
+
+    useEffect(() => {
+        // For example, we use 10% of the smallest dimension of the box.
+        const newRadius =
+            Math.min(box.size.x, box.size.y, box.size.z) * 0.075;
+        setHandleRadius(newRadius);
+    }, [box.size.x, box.size.y, box.size.z]);
 
     // **Calculate Offset Based on Corner Index**
-    const getCornerOffset = () => {
+    const getCornerOffset = (index: number) => {
         return new THREE.Vector3(
-            (handleIndex & 1 ? -1 : 1) * size.x / 2,
-            (handleIndex & 2 ? -1 : 1) * size.y / 2,
-            (handleIndex & 4 ? -1 : 1) * size.z / 2
+            (index & 1 ? -1 : 1) * box.size.x / 2,
+            (index & 2 ? -1 : 1) * box.size.y / 2,
+            (index & 4 ? -1 : 1) * box.size.z / 2
         );
     };
 
-    // **Effect: Update Position When Box Resizes (But Not If In Place)**
+    // **Effect: Update Handle Position When Box Changes**
     useEffect(() => {
-        if (!isDragging && meshRef.current && !inPlace) {
-            const offset = getCornerOffset();
-            meshRef.current.position.set(center.x + offset.x, center.y + offset.y, center.z + offset.z);
+        if (!isDragging && meshRef.current) {
+            const offset = getCornerOffset(handleIndex);
+            const rotatedOffset = offset.clone().applyEuler(box.rotation);
+
+            meshRef.current?.position.set(
+                box.center.x + rotatedOffset.x,
+                box.center.y + rotatedOffset.y,
+                box.center.z + rotatedOffset.z
+            );
         }
-    }, [center, size, inPlace]);
+    }, [box.center, box.size, box.rotation]); // Depend on box properties
 
     const applyHandleMovement = (state: any, target: THREE.Object3D) => {
         if (!meshRef.current) return;
+        defaultApply(state, target);
 
         if (state.first) {
             setIsDragging(true);
-            setSavedPosition(meshRef.current.position.clone());
-            setInPlace(false); // Mark as in-place when dragging starts
         }
 
-        defaultApply(state, target); // Let the ball move freely
-
         const worldPos = new THREE.Vector3();
-        meshRef.current.getWorldPosition(worldPos);
+        meshRef.current?.getWorldPosition(worldPos);
 
-        // Compute the opposite corner
-        const oppositeCorner = new THREE.Vector3(
-            center.x * 2 - worldPos.x,
-            center.y * 2 - worldPos.y,
-            center.z * 2 - worldPos.z
-        );
+        // **Convert worldPos into local space**
+        const localWorldPos = worldToLocal(worldPos, box);
 
-        // Compute new size
-        const newSize = new THREE.Vector3(
-            Math.abs(worldPos.x - oppositeCorner.x),
-            Math.abs(worldPos.y - oppositeCorner.y),
-            Math.abs(worldPos.z - oppositeCorner.z)
-        );
+        // **Find the Opposite Corner in Local Space**
+        const oppositeCornerIndex = handleIndex ^ 7; // Flip all bits (3-bit index)
+        const oppositeCornerLocal = getCornerOffset(oppositeCornerIndex);
 
-        // Compute new center
-        const newCenter = new THREE.Vector3(
-            (worldPos.x + oppositeCorner.x) / 2,
-            (worldPos.y + oppositeCorner.y) / 2,
-            (worldPos.z + oppositeCorner.z) / 2
-        );
+        // **Compute new local size**
+        const box3 = new THREE.Box3().setFromPoints([oppositeCornerLocal, localWorldPos]);
 
-        // **Real-time Box Update**
-        if (updateBox && boxIndex !== undefined) {
-            updateBox(boxIndex, {center: newCenter, size: newSize});
+        // **Extract new local center and size**
+        const newLocalCenter = box3.getCenter(new THREE.Vector3());
+        const newLocalSize = box3.getSize(new THREE.Vector3());
+
+        // **Convert local center back to world space**
+        const newWorldCenter = localToWorld(newLocalCenter, box);
+
+        // **Update the box with corrected rotation-aware resizing**
+        if (updateBox) {
+            updateBox({
+                ...box,
+                center: newWorldCenter,
+                size: newLocalSize,
+            });
         }
 
         if (state.last) {
             setIsDragging(false);
-            setSavedPosition(worldPos.clone());
-            setInPlace(true); // Allow future updates when handle is released
         }
     };
+
+    // Pick color depending on states:
+    const color = isDragging
+        ? "green"
+        : hovered
+            ? "lightgreen"
+            : "red";
 
     return (
         <Handle
             translate={{ x: true, y: true, z: true }}
             scale={{ uniform: true }}
-            targetRef="from-context"
+            targetRef={meshRef}
             apply={applyHandleMovement}
         >
-            <mesh ref={meshRef}>
-                <sphereGeometry args={[0.05, 16, 16]} />
-                <meshStandardMaterial color={isDragging ? "green" : "red"} />
+            <mesh ref={meshRef}
+                  onPointerOver={() => setHovered(true)}
+                  onPointerOut={() => setHovered(false)}
+            >
+                <sphereGeometry args={[handleRadius, 16, 16]} />
+                <meshStandardMaterial color={color} />
             </mesh>
         </Handle>
     );

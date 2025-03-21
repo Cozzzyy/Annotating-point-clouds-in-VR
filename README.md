@@ -40,6 +40,8 @@ project-root/
 │   ├── hooks/        # Reusable React hooks
 │   ├── scenes/       # Different scenes within the application
 │   ├── types/        # TypeScript types and interfaces
+│   ├── service       # API services
+|   ├── utils/        # Utility functions
 │   ├── index.js      # Main component
 │── package.json      # Project dependencies
 │── .gitignore        # Files to be ignored by Git
@@ -52,6 +54,13 @@ Install the required dependencies:
 ```sh
   npm install
 ```
+
+Start the json server:
+
+```sh
+  npm run simulateBackend
+```
+
 Start the development server:
 
 ```sh
@@ -59,8 +68,55 @@ Start the development server:
 ```
 
 ## 🎮 Requirements
-A VR headset with WebXR support (e.g., Meta Quest, HTC Vive, Valve Index).
+A VR headset with WebXR support (e.g., Meta Quest 2, 3).
 A powerful computer with a modern browser that supports WebXR.
+
+## 📚 Tutorial
+
+### VR Controller Instructions
+
+### Movement
+- **Left Joystick**: Move forward, backward, strafe left and right.
+- **Right Joystick**: Move up or down, rotate left or right.
+
+### Teleportation
+- **Left Controller Trigger**: Hold to see a line on the ground indicating the teleport location. Release to teleport.
+
+### Annotating an Object
+
+#### Opening the HUD
+- **Press X button (Left Controller)**: Opens the HUD.
+- **Select "Start Labeling"**: Choose a label.
+- **Default Selection**: Two-Point Annotation is selected by default.
+
+#### Drawing a Box
+1. **Position**: Stand in front of the object.
+2. **Hold Right Controller Trigger**: Start from **top-left to bottom-right**.
+3. **Move Diagonally**: While holding the trigger.
+4. **Release Trigger**: The box enters **edit mode**.
+
+#### Editing a Box
+- **Red Corner Handles**: Resize the entire box.
+- **Square Side Handles**: Adjust one side.
+- **Blue Corner Handles**: Rotate the box.
+- **Trigger on Box**: Move the box freely.
+- **Exit Edit Mode**: Press **A button (Right Controller)**.
+
+#### Brushing Mode
+- **Sphere Representation**: The brush appears as a sphere.
+- **Hover Over Points**: Points turn **yellow** when hovered.
+- **Press Right Controller Trigger**: Brushes the highlighted points.
+- **Press the joystick to create the box after brushing**.
+
+### Managing Annotations
+- **No Label Objects**:
+    - Press **B button (Right Controller)** to exit drawing mode.
+    - Click on a box to open HUD on the **Left Controller**.
+    - Options: **Choose Label | Edit Box | Delete Box**
+
+### Saving Annotations
+- **Press X button (Left Controller)**: Opens the HUD.
+- **Select "Exit and Save"**: Saves all annotations.
 
 ## 📜 License
 This project is open-source and available under the MIT license.

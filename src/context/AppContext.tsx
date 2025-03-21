@@ -1,5 +1,10 @@
 import React, { createContext, useState, useContext, ReactNode } from 'react';
 import {Dataset} from "../types/Dataset";
+import * as THREE from "three";
+import {convertEulerFromQuaternion} from "../util/convertEulerFromQuaternion";
+import {createXRStore} from "@react-three/xr";
+import {CustomXRControllerRight} from "../components/xr/controllers/CustomXRControllerRight";
+
 
 
 
@@ -8,7 +13,11 @@ interface AppContextProps {
     selectedDataset: Dataset | null;
     setSelectedDataset: (dataset: Dataset | null) => void;
     enterVR: boolean;
+    rotation: THREE.Euler;
     setEnterVR: (enter: boolean) => void;
+    setExitVR: () => void;
+    reviewMode: boolean;
+    setReviewMode: (review: boolean) => void;
 }
 
 // Create the context with an undefined initial value.
@@ -19,13 +28,23 @@ interface AppProviderProps {
     children: ReactNode;
 }
 
+
 // Create the AppProvider component.
 export function AppProvider({ children }: AppProviderProps): JSX.Element {
+
     const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
     const [enterVR, setEnterVR] = useState(false);
+    const [reviewMode, setReviewMode] = useState(false);
+    const rotation: THREE.Euler = convertEulerFromQuaternion(selectedDataset?.egoPose?.heading!);
+
+    const setExitVR = async () => {
+        setEnterVR(false);
+        setReviewMode(false);
+    };
+
 
     return (
-        <AppContext.Provider value={{ selectedDataset, setSelectedDataset, enterVR, setEnterVR }}>
+        <AppContext.Provider value={{ selectedDataset, setSelectedDataset, enterVR, setEnterVR, reviewMode, setReviewMode, setExitVR , rotation}}>
             {children}
         </AppContext.Provider>
     );

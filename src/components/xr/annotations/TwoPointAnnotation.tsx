@@ -1,149 +1,118 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { useThree, useFrame } from "@react-three/fiber";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import {useThree, useFrame, RootState} from "@react-three/fiber";
 import { Edges } from "@react-three/drei";
 import * as THREE from "three";
 import { AnnotationBox } from "../../../types/AnnotationBox";
-import { useXRInputSourceState } from "@react-three/xr";
+import {useXR, useXRInputSourceState} from "@react-three/xr";
+import { usePointerPosition } from "../../../context/PointerPositionContext";
+import {v4 as uuidv4} from "uuid";
 
 interface TwoPointAnnotationProps {
     setBox: (box: AnnotationBox) => void;
 }
 
 export function TwoPointAnnotation({ setBox }: TwoPointAnnotationProps) {
-    const { gl } = useThree();
+    const { gl} = useThree();
+    const { camera } = useThree();
     const [startMarker, setStartMarker] = useState<THREE.Vector3 | null>(null);
     const [previewMarker, setPreviewMarker] = useState<THREE.Vector3 | null>(null);
-    const [activeController, setActiveController] = useState<THREE.Object3D | null>(null);
     const controllerSource = useXRInputSourceState("controller", "right");
     const [hoveringBox, setHoveringBox] = useState(false);
+    const { pointerPosition } = usePointerPosition();
+    const [showPreviewPointer, setShowPreviewPointer] = useState(true);
+    const [rotation, setRotation] = useState(0);
+    function getWorldCameraYaw(): number {
 
-    /**
-     * Computes the annotation box from two points.
-     *
-     * Given two points (p1 and p2), this function calculates the center point
-     * and the size (dimensions) of the box defined by these two points.
-     *
-     * @param p1 - The first point.
-     * @param p2 - The second point.
-     * @returns An object containing the center and size of the box.
-     */
-    const computeBox = (p1: THREE.Vector3, p2: THREE.Vector3) => {
-        const center = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
-        const size = new THREE.Vector3(
-            Math.abs(p2.x - p1.x),
-            Math.abs(p2.y - p1.y),
-            Math.abs(p2.z - p1.z)
-        );
-        return { center, size };
+        // 1️⃣ Get world quaternion of camera
+        const worldQuat = new THREE.Quaternion();
+        camera.getWorldQuaternion(worldQuat);
+
+        // 5️⃣ Convert to Euler and return yaw
+        const euler = new THREE.Euler().setFromQuaternion(worldQuat, 'YXZ');
+        return euler.y;
+    }
+
+
+
+    const computeOrientedBox = (p1: THREE.Vector3, p2: THREE.Vector3, yaw: number) => {
+        // Create a quaternion for the inverse rotation.
+        const inverseQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -yaw, 0));
+
+        // Transform p1 and p2 into the rotated (local) coordinate system.
+        const localP1 = p1.clone().applyQuaternion(inverseQuat);
+        const localP2 = p2.clone().applyQuaternion(inverseQuat);
+
+        // Compute an axis-aligned bounding box in this rotated (local) space.
+        const box3 = new THREE.Box3().setFromPoints([localP1, localP2]);
+        const centerLocal = new THREE.Vector3();
+        const size = new THREE.Vector3();
+        box3.getCenter(centerLocal);
+        box3.getSize(size);
+
+        // Now, transform the center back to world coordinates by reapplying the rotation.
+        const quat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0));
+        const center = centerLocal.applyQuaternion(quat);
+
+        return { center, size, rotation: new THREE.Euler(0, yaw, 0) };
     };
 
-    /**
-     * Determines the controller's pointing position in world space.
-     *
-     * This function retrieves the controller's world position and orientation,
-     * applies a forward direction vector, and returns the position where the
-     * controller is "pointing" at a default distance.
-     *
-     * @param controller - The controller object.
-     * @returns The computed pointing position.
-     */
-    const getPointingPosition = (controller: THREE.Object3D | null) => {
-        if (!controller) return new THREE.Vector3();
-        const controllerPos = new THREE.Vector3();
-        controller.getWorldPosition(controllerPos);
-        const controllerQuat = new THREE.Quaternion();
-        controller.getWorldQuaternion(controllerQuat);
-        // Local forward direction of the controller
-        const localForward = new THREE.Vector3(0, -1, -1);
-        // Apply the controller's quaternion to get the world forward direction
-        const pointerDir = localForward.applyQuaternion(controllerQuat).normalize();
-        const defaultDistance = 1; // Adjust this distance as needed
-        return controllerPos.clone().add(pointerDir.multiplyScalar(defaultDistance));
-    };
 
-    /**
-     * Handles the start of a selection event (selectstart).
-     *
-     * When a selectstart event is triggered and the controller is not hovering over
-     * an existing box, this function sets the start and preview markers to the current
-     * pointing position of the controller.
-     *
-     * @param event - The selection start event.
-     */
     const handleSelectStart = useCallback(
         (event: any) => {
-            // Only start a box if we’re not hovering over an existing one and the controller exists
-            if (hoveringBox || !controllerSource?.object) return;
-            const startPos = getPointingPosition(controllerSource.object);
-            console.log("New box drag start at:", startPos);
-            setStartMarker(startPos);
-            setPreviewMarker(startPos);
-            setActiveController(controllerSource.object);
+            if (pointerPosition) {
+                setRotation(getWorldCameraYaw)
+                setShowPreviewPointer(false);
+                const currentPos = new THREE.Vector3();
+                pointerPosition.getWorldPosition(currentPos);
+                setStartMarker(currentPos);
+                setPreviewMarker(currentPos);
+            }
         },
-        [hoveringBox, controllerSource]
+        [pointerPosition, hoveringBox, controllerSource]
     );
 
-    /**
-     * Handles the end of a selection event (selectend).
-     *
-     * When a selectend event occurs, this function computes the final annotation box
-     * using the start and preview markers, passes it to the setBox callback, and resets
-     * the markers.
-     *
-     * @param event - The selection end event.
-     */
     const handleSelectEnd = useCallback(
         (event: any) => {
             if (startMarker && previewMarker) {
-                const box = computeBox(startMarker, previewMarker);
-                setBox(box);
+                setShowPreviewPointer(true);
+                const box = computeOrientedBox(startMarker, previewMarker, rotation);
+                const annotatedBox: AnnotationBox = {
+                    id: uuidv4(),
+                    center: box.center,
+                    size: box.size,
+                    rotation: box.rotation,
+                    accepted: true,
+                };
+                setBox(annotatedBox);
             }
             setStartMarker(null);
             setPreviewMarker(null);
-            setActiveController(null);
         },
         [startMarker, previewMarker, setBox]
     );
 
-    /**
-     * Updates the preview marker on every frame.
-     *
-     * This useFrame callback continuously calculates the controller's current pointing
-     * position and updates the preview marker, allowing for real-time feedback during
-     * the box creation process.
-     */
-    useFrame(() => {
-        if (!controllerSource?.object) return;
-        // Compute the current pointer position from where the controller is pointing
-        const newPreview = getPointingPosition(controllerSource.object);
-        setPreviewMarker(newPreview);
+    useFrame((state) => {
+
+        //setRotation(state.camera.getWorldDirection(new THREE.Vector3()).angleTo(new THREE.Vector3(0, 0, -1)));
+
+
+
+        if (pointerPosition) {
+            const currentPos = new THREE.Vector3();
+            pointerPosition.getWorldPosition(currentPos);
+            setPreviewMarker(currentPos);
+        }
     });
 
-    /**
-     * Adds event listeners to XR controllers for select events.
-     *
-     * This useEffect hook attaches the handleSelectStart and handleSelectEnd event
-     * listeners to both available XR controllers when the component mounts, and cleans
-     * them up when it unmounts.
-     */
     useEffect(() => {
-        const controller1 = gl.xr.getController(0);
+        const controller = gl.xr.getController(0);
         const controller2 = gl.xr.getController(1);
 
-        if (controller1) {
-            controller1.addEventListener("selectstart", handleSelectStart);
-            controller1.addEventListener("selectend", handleSelectEnd);
-        }
         if (controller2) {
             controller2.addEventListener("selectstart", handleSelectStart);
             controller2.addEventListener("selectend", handleSelectEnd);
         }
-
         return () => {
-            if (controller1) {
-                controller1.removeEventListener("selectstart", handleSelectStart);
-                controller1.removeEventListener("selectend", handleSelectEnd);
-            }
             if (controller2) {
                 controller2.removeEventListener("selectstart", handleSelectStart);
                 controller2.removeEventListener("selectend", handleSelectEnd);
@@ -151,18 +120,36 @@ export function TwoPointAnnotation({ setBox }: TwoPointAnnotationProps) {
         };
     }, [gl, handleSelectStart, handleSelectEnd]);
 
-    // Render a preview box if both start and preview markers are available.
     let previewBox = null;
     if (startMarker && previewMarker) {
-        const { center, size } = computeBox(startMarker, previewMarker);
+        const box = computeOrientedBox(startMarker, previewMarker, rotation);
+
+
+
         previewBox = (
-            <mesh position={center}>
-                <boxGeometry args={[size.x, size.y, size.z]} />
+            <mesh position={box.center} rotation={box.rotation}>
+                <boxGeometry args={[box.size.x, box.size.y, box.size.z]} />
                 <meshStandardMaterial color="blue" transparent opacity={0.3} />
                 <Edges color="white" />
             </mesh>
         );
     }
 
-    return <>{previewBox}</>;
+
+    let previewBall = null;
+    if (previewMarker) {
+        previewBall = (
+            <mesh position={previewMarker} visible={showPreviewPointer}>
+                <sphereGeometry args={[0.15, 20, 20]} />
+                <meshStandardMaterial color="red" />
+            </mesh>
+        );
+    }
+
+    return (
+        <>
+            {previewBox}
+            {previewBall}
+        </>
+    );
 }

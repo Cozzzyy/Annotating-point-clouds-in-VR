@@ -1,5 +1,6 @@
 import {useXRInputSourceState} from "@react-three/xr";
 import {useFrame} from "@react-three/fiber";
+import {useBoxContext} from "../../../context/BoxContext";
 
 interface ToggleEditModeProps {
     editMode: boolean;
@@ -11,6 +12,7 @@ interface ToggleEditModeProps {
 }
 
 export function ToggleEditMode( {editMode, setEditMode, setPreviousDrawMode, setDrawMode, previousDrawMode}: ToggleEditModeProps) {
+    const {clearEditMode} = useBoxContext();
     const controller = useXRInputSourceState("controller", "right");
 
     useFrame(() => {
@@ -19,7 +21,7 @@ export function ToggleEditMode( {editMode, setEditMode, setPreviousDrawMode, set
                 setEditMode(false);
                 setDrawMode(previousDrawMode);
                 setPreviousDrawMode("");
-
+                clearEditMode();
             }
         }
     });

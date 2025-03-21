@@ -18,7 +18,7 @@ interface SettingsProviderProps {
 
 // Define the provider component without using React.FC
 export function SettingsProvider({ children }: SettingsProviderProps): JSX.Element {
-    const [pointSize, setPointSize] = useState<number>(0.02);
+    const [pointSize, setPointSize] = useState<number>(0.015);
     const [drawMode, setDrawMode] = useState<string>("brushing");
 
 

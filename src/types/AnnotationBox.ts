@@ -1,10 +1,14 @@
 import * as THREE from 'three';
-import {LabelSpec} from "./LabelSpec";
+import {Label} from "./Label";
 
 export interface AnnotationBox
 {
-    id?: number;
+    id: string;
     center: THREE.Vector3;
     size: THREE.Vector3;
-    label?: LabelSpec;
+    rotation: THREE.Euler;
+    label?: Label;
+    datasetId?: string;
+    editable?: boolean;
+    accepted: boolean;
 }
